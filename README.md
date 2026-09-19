@@ -25,7 +25,7 @@
 - **Severity Distribution**: Bar chart showing alert severity levels
 - **Statistics Cards**: Quick overview of total alerts, blocked IPs, and unique sources
 - **Auto-refresh**: Dashboard updates every 5 seconds
-- This project was intentionally designed to be simple to deploy and easy to understand, making it accessible to students, early-career security engineers, and practitioners learning Intrusion Detection concepts.
+- Advanced Python IDS was designed with a modular, deployment-friendly architecture that prioritises operational simplicity, code clarity, and maintainability. Its accessible implementation enables students, early-career    security engineers, and cybersecurity practitioners to examine, configure, test, and extend intrusion detection capabilities for authorised network monitoring and defensive security applications.
 
 ## 📋 Requirements
 
@@ -275,7 +275,21 @@ This project is open-source and available for educational, personal, and volunta
 
 ## ⚠️ Disclaimer
 
-This tool is for authorized security monitoring only. Unauthorized access to computer networks is illegal. Always ensure you have proper authorization before deploying this IDS on any network.
+Advanced Python IDS is intended solely for authorized network security
+monitoring, deployments, defensive testing, and educational purposes.
+
+You must have explicit permission from the network owner or authorized
+administrator before deploying or testing this tool on any system or network.
+
+Users are responsible for ensuring that their use of this software complies
+with all applicable laws, regulations, and organizational security policies.
+
+This project is provided "as is", without warranties of any kind. The
+developer assumes no responsibility for misuse, unauthorized deployment,
+or any damage resulting from the use of this software.
+
+Use this tool responsibly and only within environments you are authorized
+to monitor.
 
 ## 📞 Support
 
