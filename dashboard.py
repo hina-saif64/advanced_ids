@@ -26,8 +26,8 @@ def get_alerts():
         if os.path.exists(ALERT_CSV):
             df = pd.read_csv(ALERT_CSV)
             return df
-    except Exception as e:
-        print(f"Error reading alerts: {str(e)}")
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError) as error:
+        print(f"Error reading alerts: {error}")
     return pd.DataFrame(columns=[
     "timestamp",
     "src_ip",
@@ -77,8 +77,8 @@ def create_alerts_timeline(df):
         return go.Figure().add_annotation(text="No data available")
     
     try:
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        alerts_per_minute = df.groupby(df['timestamp'].dt.floor('1min')).size()
+        timestamps = pd.to_datetime(df['timestamp'], errors='raise')
+        alerts_per_minute = df.groupby(timestamps.dt.floor('1min')).size()
         
         fig = px.line(
             x=alerts_per_minute.index,
@@ -89,8 +89,8 @@ def create_alerts_timeline(df):
         )
         fig.update_layout(height=400)
         return fig
-    except Exception as e:
-        print(f"Error creating timeline: {str(e)}")
+    except (AttributeError, TypeError, ValueError) as error:
+        print(f"Error creating timeline: {error}")
         return go.Figure().add_annotation(text="Error processing timeline")
 
 def create_location_chart(df):

@@ -38,6 +38,9 @@ env/
 alerts.csv
 ids.log
 .dash.cache/
+.env
+.env.*
+!.env.example
 *.pyc
 
 # Temporary files

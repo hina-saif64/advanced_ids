@@ -58,26 +58,30 @@ pip install -r requirements.txt
 
 ### 3. Configuration (Optional)
 
-Edit `simple_ids.py` to customize:
+Runtime secrets and deployment-specific settings are read from environment
+variables instead of being stored in source code. Copy the included template,
+fill in local values, and load it into your shell:
 
-```python
-# Suspicious ports to monitor
-SUSPICIOUS_PORTS = [22, 23, 3389, 445, 139, 135]
-
-# Block threshold (number of attempts before blocking)
-BLOCK_THRESHOLD = 3
-
-# Email notifications (set to True to enable)
-EMAIL_ALERTS = False
-EMAIL_FROM = "your_email@example.com"
-EMAIL_TO = "recipient_email@example.com"
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_PASS = "your_app_password"
-
-# Firewall blocking (set to True to enable)
-FIREWALL_BLOCKING = False
+```bash
+cp .env.example .env
+# Edit .env locally. Never commit this file.
+set -a
+source .env
+set +a
 ```
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `IDS_EMAIL_ALERTS` | `false` | Enable blocked-IP email notifications |
+| `IDS_EMAIL_FROM` | Empty | Authenticated sender address |
+| `IDS_EMAIL_TO` | Empty | Alert recipient address |
+| `IDS_SMTP_SERVER` | `smtp.gmail.com` | SMTP host |
+| `IDS_SMTP_PORT` | `587` | SMTP STARTTLS port |
+| `IDS_SMTP_PASSWORD` | Empty | SMTP or app-specific password |
+| `IDS_FIREWALL_BLOCKING` | `false` | Enable OS-level blocking |
+
+The monitored ports and block threshold remain simple constants near the top
+of `simple_ids.py` for educational customization.
 
 ## 📖 Usage
 
@@ -126,6 +130,17 @@ The dashboard will automatically update every 5 seconds with:
 ### Stop the IDS
 Press `Ctrl+C` in the terminal running `simple_ids.py`
 
+### Run the Tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The regression suite covers secure firewall command construction,
+environment-based configuration, GeoIP input handling, email configuration,
+and threshold alert logging. GitHub Actions runs the same suite on supported
+Python versions for every pull request.
+
 ## 📊 Output Files
 
 ### alerts.csv
@@ -153,24 +168,24 @@ Log file with detailed system information:
 1. **For Gmail**:
    - Enable 2-Factor Authentication
    - Generate App Password: https://myaccount.google.com/apppasswords
-   - Update `simple_ids.py`:
-   ```python
-   EMAIL_ALERTS = True
-   EMAIL_FROM = "your_email@gmail.com"
-   EMAIL_TO = "recipient@example.com"
-   SMTP_SERVER = "smtp.gmail.com"
-   SMTP_PORT = 587
-   SMTP_PASS = "your_16_character_app_password"
+   - Store the settings in your local `.env` file:
+   ```bash
+   IDS_EMAIL_ALERTS=true
+   IDS_EMAIL_FROM=your_email@gmail.com
+   IDS_EMAIL_TO=recipient@example.com
+   IDS_SMTP_SERVER=smtp.gmail.com
+   IDS_SMTP_PORT=587
+   IDS_SMTP_PASSWORD=your_16_character_app_password
    ```
 
 2. **For Other Email Providers**:
-   - Update SMTP_SERVER and SMTP_PORT accordingly
+   - Update `IDS_SMTP_SERVER` and `IDS_SMTP_PORT` accordingly
    - Use app-specific passwords if available
 
 ### Enable Firewall Blocking
 
-```python
-FIREWALL_BLOCKING = True
+```bash
+export IDS_FIREWALL_BLOCKING=true
 ```
 
 Then run with sudo:
@@ -178,7 +193,9 @@ Then run with sudo:
 sudo python3 simple_ids.py
 ```
 
-**Note**: This will add iptables rules to block suspicious IPs at the OS level.
+**Note**: This adds validated, duplicate-checked `iptables` or `ip6tables`
+rules at the OS level. The IDS must run as root when firewall blocking is
+enabled.
 
 ### Add Custom Ports
 
@@ -191,7 +208,7 @@ SUSPICIOUS_PORTS = [22, 23, 3389, 445, 139, 135, 8080, 9000]  # Add your ports
 ## 🛡️ Security Best Practices
 
 1. **Run with appropriate privileges**: Use `sudo` only when necessary
-2. **Secure email credentials**: Use environment variables or configuration files with restricted permissions
+2. **Secure email credentials**: Keep SMTP secrets in a local `.env` file or secret manager; `.env` is ignored by Git
 3. **Monitor logs regularly**: Check `ids.log` for suspicious patterns
 4. **Update dependencies**: Regularly run `pip install --upgrade -r requirements.txt`
 5. **Firewall rules**: Periodically review and clean up old iptables rules

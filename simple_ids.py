@@ -10,16 +10,20 @@ Features:
 - Firewall integration (iptables)
 """
 
-import pandas as pd
-from datetime import datetime
-from scapy.all import sniff
-from scapy.layers.inet import IP, TCP
-import requests
-import smtplib
-from email.message import EmailMessage
-import os
-import sys
+import ipaddress
 import logging
+import os
+import smtplib
+import subprocess
+import sys
+from datetime import datetime
+from email.message import EmailMessage
+
+import pandas as pd
+import requests
+from scapy.all import sniff
+from scapy.error import Scapy_Exception
+from scapy.layers.inet import IP, TCP
 
 # Configure logging
 logging.basicConfig(
@@ -32,19 +36,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def env_flag(name, default=False):
+    """Read a boolean environment variable using common truthy values."""
+    fallback = "true" if default else "false"
+    return os.getenv(name, fallback).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
 # ---------------------------
 # CONFIGURATION
 # ---------------------------
 SUSPICIOUS_PORTS = [22, 23, 3389, 445, 139, 135]  # SSH, Telnet, RDP, SMB, NetBIOS
 ALERT_CSV = "alerts.csv"
 BLOCK_THRESHOLD = 3
-EMAIL_ALERTS = False  # Set to True and configure credentials below
-EMAIL_FROM = "your_email@example.com"
-EMAIL_TO = "recipient_email@example.com"
-SMTP_SERVER = "smtp.gmail.com"  # Change for your email provider
-SMTP_PORT = 587
-SMTP_PASS = "your_app_password"  # Use app-specific password for Gmail
-FIREWALL_BLOCKING = False  # Set to True to enable firewall blocking (requires sudo)
+EMAIL_ALERTS = env_flag("IDS_EMAIL_ALERTS")
+EMAIL_FROM = os.getenv("IDS_EMAIL_FROM", "")
+EMAIL_TO = os.getenv("IDS_EMAIL_TO", "")
+SMTP_SERVER = os.getenv("IDS_SMTP_SERVER", "smtp.gmail.com")
+SMTP_PASS = os.getenv("IDS_SMTP_PASSWORD", "")
+FIREWALL_BLOCKING = env_flag("IDS_FIREWALL_BLOCKING")
+
+try:
+    SMTP_PORT = int(os.getenv("IDS_SMTP_PORT", "587"))
+except ValueError:
+    logger.warning("Invalid IDS_SMTP_PORT; falling back to port 587")
+    SMTP_PORT = 587
 
 blocked_ips = {}
 geoip_cache = {}  # Cache GeoIP lookups to reduce API calls
@@ -78,17 +95,31 @@ def get_geo(ip):
     """
     if ip in geoip_cache:
         return geoip_cache[ip]
-    
+
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        logger.warning("GeoIP lookup skipped for invalid IP address: %s", ip)
+        return "Unknown"
+
+    if not parsed_ip.is_global:
+        geoip_cache[ip] = "Private or reserved network"
+        return geoip_cache[ip]
+
     try:
         response = requests.get(f"http://ip-api.com/json/{ip}", timeout=3)
-        if response.status_code == 200:
-            data = response.json()
+        response.raise_for_status()
+        data = response.json()
+        if data.get("status") == "success":
             location = f"{data.get('country', 'Unknown')}, {data.get('city', 'Unknown')}"
             geoip_cache[ip] = location
             return location
-    except Exception as e:
-        logger.warning(f"GeoIP lookup failed for {ip}: {str(e)}")
-    
+        logger.warning("GeoIP provider returned no location for %s", ip)
+    except requests.Timeout:
+        logger.warning("GeoIP lookup timed out for %s", ip)
+    except (requests.RequestException, ValueError) as error:
+        logger.warning("GeoIP lookup failed for %s: %s", ip, error)
+
     return "Unknown"
 
 # ---------------------------
@@ -97,8 +128,21 @@ def get_geo(ip):
 def send_email_alert(ip, location):
     """Send email notification when IP is blocked"""
     if not EMAIL_ALERTS:
-        return
-    
+        return False
+
+    required_settings = {
+        "IDS_EMAIL_FROM": EMAIL_FROM,
+        "IDS_EMAIL_TO": EMAIL_TO,
+        "IDS_SMTP_PASSWORD": SMTP_PASS,
+    }
+    missing = [name for name, value in required_settings.items() if not value]
+    if missing:
+        logger.error(
+            "Email alerts are enabled but required settings are missing: %s",
+            ", ".join(missing),
+        )
+        return False
+
     try:
         msg = EmailMessage()
         msg.set_content(
@@ -116,10 +160,12 @@ def send_email_alert(ip, location):
             server.starttls()
             server.login(EMAIL_FROM, SMTP_PASS)
             server.send_message(msg)
-        
-        logger.info(f"Email alert sent for blocked IP: {ip}")
-    except Exception as e:
-        logger.error(f"Failed to send email alert for {ip}: {str(e)}")
+
+        logger.info("Email alert sent for blocked IP: %s", ip)
+        return True
+    except (OSError, smtplib.SMTPException, ValueError) as error:
+        logger.error("Failed to send email alert for %s: %s", ip, error)
+        return False
 
 # ---------------------------
 # FIREWALL BLOCKING
@@ -127,18 +173,50 @@ def send_email_alert(ip, location):
 def block_ip_firewall(ip):
     """Block IP at OS level using iptables (Linux only)"""
     if not FIREWALL_BLOCKING:
-        return
-    
+        return False
+
     try:
-        # Check if running as root
-        if os.geteuid() != 0:
-            logger.warning(f"Cannot block {ip} - requires root privileges")
-            return
-        
-        os.system(f"sudo iptables -A INPUT -s {ip} -j DROP")
-        logger.info(f"Firewall rule added to block: {ip}")
-    except Exception as e:
-        logger.error(f"Firewall blocking failed for {ip}: {str(e)}")
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        logger.error("Firewall blocking rejected invalid IP address: %s", ip)
+        return False
+
+    if os.geteuid() != 0:
+        logger.warning("Cannot block %s - requires root privileges", ip)
+        return False
+
+    firewall_command = "iptables" if parsed_ip.version == 4 else "ip6tables"
+    rule = ["INPUT", "-s", str(parsed_ip), "-j", "DROP"]
+
+    try:
+        existing_rule = subprocess.run(
+            [firewall_command, "-C", *rule],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if existing_rule.returncode == 0:
+            logger.info("Firewall rule already exists for: %s", ip)
+            return True
+
+        subprocess.run(
+            [firewall_command, "-A", *rule],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        logger.info("Firewall rule added to block: %s", ip)
+        return True
+    except FileNotFoundError:
+        logger.error("%s is not installed or not available on PATH", firewall_command)
+    except subprocess.CalledProcessError as error:
+        logger.error(
+            "Firewall blocking failed for %s: %s",
+            ip,
+            error.stderr.strip() if error.stderr else error,
+        )
+
+    return False
 
 # ---------------------------
 # ATTACK TYPE DETECTION
@@ -207,7 +285,7 @@ def detect_suspicious_packet(packet):
 
     try:
 
-        if not packet.haslayer(TCP):
+        if not packet.haslayer(IP) or not packet.haslayer(TCP):
             return
 
         src_ip = packet[IP].src
@@ -225,8 +303,6 @@ def detect_suspicious_packet(packet):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         location = get_geo(src_ip)
-
-        blocked = False
 
         # Create entry if first time seen
         if src_ip not in blocked_ips:
@@ -249,6 +325,11 @@ def detect_suspicious_packet(packet):
             packet
         )
 
+        blocked = attempt_count >= BLOCK_THRESHOLD
+
+        if blocked:
+            blocked_ips[src_ip]["status"] = "blocked"
+
         logger.info(
             f"[ALERT] "
             f"{src_ip} "
@@ -258,7 +339,8 @@ def detect_suspicious_packet(packet):
             f"| Attempt #{attempt_count}"
         )
 
-        # Save alert
+        # Save exactly one alert for each suspicious packet. The threshold
+        # event is recorded as blocked instead of producing a duplicate row.
         alert = pd.DataFrame([[
             timestamp,
             src_ip,
@@ -288,12 +370,7 @@ def detect_suspicious_packet(packet):
         )
 
         # Block attacker
-        if attempt_count >= BLOCK_THRESHOLD:
-
-            blocked = True
-
-            blocked_ips[src_ip]["status"] = "blocked"
-
+        if blocked:
             logger.warning(
                 f"[BLOCK] "
                 f"{src_ip} "
@@ -308,39 +385,8 @@ def detect_suspicious_packet(packet):
                 location
             )
 
-            blocked_alert = pd.DataFrame([[
-                timestamp,
-                src_ip,
-                dst_port,
-                attack_type,
-                severity,
-                location,
-                blocked,
-                attempt_count
-            ]],
-            columns=[
-                "timestamp",
-                "src_ip",
-                "dst_port",
-                "attack_type",
-                "severity",
-                "location",
-                "blocked",
-                "attempt_count"
-            ])
-
-            blocked_alert.to_csv(
-                ALERT_CSV,
-                mode="a",
-                header=False,
-                index=False
-            )
-
-    except Exception as e:
-
-        logger.error(
-            f"Error processing packet: {str(e)}"
-        )
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
+        logger.error("Error processing packet: %s", error)
 
 # ---------------------------
 # STATISTICS
@@ -359,8 +405,8 @@ def print_statistics():
             logger.info(f"Blocked IPs: {blocked_count}")
             logger.info(f"Unique Source IPs: {unique_ips}")
             logger.info(f"========================\n")
-    except Exception as e:
-        logger.error(f"Error printing statistics: {str(e)}")
+    except (KeyError, OSError, ValueError, pd.errors.ParserError) as error:
+        logger.error("Error printing statistics: %s", error)
 
 # ---------------------------
 # MAIN
@@ -385,8 +431,8 @@ def main():
         logger.info("\nIDS stopped by user")
         print_statistics()
         sys.exit(0)
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
+    except (OSError, PermissionError, Scapy_Exception) as error:
+        logger.error("Fatal error: %s", error)
         sys.exit(1)
 
 if __name__ == "__main__":
