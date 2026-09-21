@@ -288,7 +288,7 @@ Contributions are welcome! Areas for improvement:
 
 ## 📝 License
 
-This project is open-source and available for educational, personal, and voluntary work purposes.
+This project is open-source and available for educational, personal, Organisation Deployments, and voluntary work purposes.
 
 ## ⚠️ Disclaimer
 
