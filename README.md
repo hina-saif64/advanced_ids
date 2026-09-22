@@ -288,7 +288,7 @@ Contributions are welcome! Areas for improvement:
 
 ## 📝 License
 
-This project is open-source and available for educational, personal, Organisation Deployments, and voluntary work purposes.
+This project is open-source and available for educational, personal, Organisational Deployments, and voluntary work purposes.
 
 ## ⚠️ Disclaimer
 
@@ -324,6 +324,6 @@ For issues, questions, or suggestions:
 
 ---
 
-**Created with ❤️ for cybersecurity enthusiasts and professionals**
+**Created with ❤️ for cybersecurity enthusiasts and professionals for Deployments in Organisations**
 
 Last Updated: July 2026
