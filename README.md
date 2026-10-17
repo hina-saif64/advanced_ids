@@ -25,7 +25,7 @@
 - **Severity Distribution**: Bar chart showing alert severity levels
 - **Statistics Cards**: Quick overview of total alerts, blocked IPs, and unique sources
 - **Auto-refresh**: Dashboard updates every 5 seconds
-- Advanced Python IDS was designed with a modular, deployment-friendly architecture that prioritises operational simplicity, code clarity, and maintainability. Its accessible implementation enables students, early-career    security engineers, and cybersecurity practitioners to examine, configure, test, and extend intrusion detection capabilities for authorised network monitoring and defensive security applications.
+- Advanced Python IDS was designed with a modular, deployment-friendly architecture that prioritises operational simplicity, code clarity, and maintainability. Its accessible implementation enables security engineers, and organistions to examine, configure, test, and extend intrusion detection capabilities for authorised network monitoring and defensive security applications.
 
 ## 📋 Requirements
 
@@ -272,7 +272,7 @@ The IDS performs lightweight rule-based attack classification using observed net
 | SYN Flood                   | Excessive TCP SYN packets detected                  | Critical |
 | Unknown Suspicious Activity | Suspicious traffic that does not match a known rule | Low      |
 
-Attack classification is based on predefined heuristics and is intended for educational and learning purposes rather than full signature-based intrusion detection.
+Attack classification is based on predefined heuristics and is intended for implementation and deployments.
 
 
 ## 🤝 Contributing
