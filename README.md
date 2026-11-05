@@ -315,13 +315,6 @@ For issues, questions, or suggestions:
 2. Review `ids.log` for error messages
 3. Open an issue on GitHub with detailed information
 
-## 🎓 Learning Resources
-
-- [Scapy Documentation](https://scapy.readthedocs.io/)
-- [Dash Documentation](https://dash.plotly.com/)
-- [Network Security Basics](https://www.cisco.com/c/en/us/support/docs/security/)
-- [IDS/IPS Concepts](https://www.paloaltonetworks.com/cyberpedia/what-is-ids-ips)
-
 ---
 
 **Created with ❤️ for cybersecurity enthusiasts and professionals for Deployments in Organisations**
